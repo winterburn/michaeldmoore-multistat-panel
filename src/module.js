@@ -180,8 +180,6 @@ class MultistatPanelCtrl extends MetricsPanelCtrl {
   }
 
   onDataError(err) {
-    this.seriesList = [];
-    this.data = [];
     this.displayStatusMessage(
       "Query failure, Status=" + err.status + ", " + err.statusText
     );
@@ -263,18 +261,21 @@ class MultistatPanelCtrl extends MetricsPanelCtrl {
       this.data = data;
       this.rows = null;
       this.render();
-    } else if (data[0].type == "table" || data[0].columns) {
-      this.data = data[0];
-
-      for (let i = 0; i < this.data.columns.length; i++)
-        this.cols[i] = this.data.columns[i].text;
+    }
+    else {
+      this.data = [];
+      for (let source of data){
+        if (source.type == "table" || source.columns) {
+          this.data.push(source);
+        } else {
+          this.data = [];
+          this.displayStatusMessage("Multistat only supports Table datasets");
+          return;
+        }
+      }
+      for (let i = 0; i < this.data[0].columns.length; i++)
+        this.cols[i] = this.data[0].columns[i].text;
       this.cols0 = [""].concat(this.cols);
-
-      this.render();
-    } else {
-      this.displayStatusMessage("Multistat only supports Table datasets");
-      this.data = data;
-      this.rows = null;
       this.render();
     }
   }
@@ -359,7 +360,7 @@ class MultistatPanelCtrl extends MetricsPanelCtrl {
   }
 
   onRender() {
-    if (this.data != null && this.data.rows && this.data.rows.length) {
+    if (this.data != null && this.data) {
       var cols = this.cols;
       var dateTimeCol = -1;
       var labelCol = -1;
@@ -392,15 +393,16 @@ class MultistatPanelCtrl extends MetricsPanelCtrl {
         else return obj[labelCol];
       };
 
+      this.matchingRows = [];
       if (this.panel.LabelNameFilter.length > 0 && labelCol != -1) {
         var regex = new RegExp(this.panel.LabelNameFilter, "");
-        this.matchingRows = [];
-        for (let i = 0; i < this.data.rows.length; i++) {
-          var dd = this.data.rows[i];
-          var label = dd[labelCol];
-          if (label.match(regex) != null) this.matchingRows.push(dd);
+        for (let source of this.data){
+          for (let i = 0; i < source.rows.length; i++) {
+            var dd = source.rows[i];
+            var label = dd[labelCol];
+            if (label.match(regex) != null) this.matchingRows.push(dd);
+          }
         }
-
         if (this.matchingRows.length == 0) {
           this.displayStatusMessage(
             "No data.  Regex filter '" +
@@ -411,7 +413,10 @@ class MultistatPanelCtrl extends MetricsPanelCtrl {
           );
           return;
         }
-      } else this.matchingRows = this.data.rows;
+      } else {
+        for (let source of this.data)
+          this.matchingRows.push(...source.rows);
+      }
 
       if (
         this.panel.Aggregate != "all" &&
